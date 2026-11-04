@@ -1,0 +1,4 @@
+# The tool commands run once and exit: no operator API.
+spring:
+  main:
+    web-application-type: none

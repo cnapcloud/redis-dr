@@ -1,0 +1,61 @@
+spring:
+  main:
+    banner-mode: off
+  task:
+    scheduling:
+      # Scheduler for the periodic jobs (source watch, stat report, layout check).
+      # The workers use their own scheduler, sized by the number of partitions.
+      pool:
+        size: 4
+      thread-name-prefix: dr-job-
+
+# Operator API (/api/v1/**, Swagger UI at /swagger-ui.html). There is no authentication, so it only listens on the
+# loopback address by default; reach it with kubectl port-forward / exec. Set server.address (SERVER_ADDRESS) with care:
+# POST /api/v1/full-sync flushes Site B. The "tool" profile does not start the web server.
+server:
+  port: 8081
+  address: 127.0.0.1
+
+redis-dr:
+  # sentinel: Redis Sentinel A -> B (one partition). cluster: Redis Cluster A -> B (one partition per shard).
+  mode: sentinel
+
+  sentinel:
+    # Seconds a healthy replica may be unable to serve the checkpoint before falling back to a full sync (0 = never).
+    fullsync-fallback-seconds: 20
+    # Sentinel of the active site (A): where the source replica is chosen.
+    source:
+      # Sentinel nodes (host:port, comma separated); the first one that answers is used.
+      nodes: sentinel-a:26379
+      master: mymaster
+      # Appended to host names with a single dot (e.g. redis-a-0.redis-a) that Sentinel announces.
+      domain-suffix: ""
+    # Sentinel of the DR site (B): where the DR master address is tracked.
+    target:
+      nodes: sentinel-b:26379
+      master: mymaster
+      domain-suffix: ""
+
+  cluster:
+    # Healthy replicas that all lack the history after the checkpoint (e.g. a replaced replica that did a full sync)
+    # for this long make the shard fall back to a full sync of its B master (0 = never).
+    fullsync-fallback-seconds: 20
+    # Any nodes of each cluster (host:port, comma separated); CLUSTER SHARDS is asked to the first one that answers.
+    # Active site (A):
+    source:
+      nodes: redis-a-leader.redis-dr-a:6379,redis-a-follower.redis-dr-a:6379
+    # DR site (B):
+    target:
+      nodes: redis-b-leader.redis-dr-b:6379,redis-b-follower.redis-dr-b:6379
+
+  scheduler:
+    worker-retry-ms: 200      # gap between worker steps (also the pause between two replication sessions)
+    source-watch-ms: 1000     # is the source replica promoted to master?
+    stat-report-ms: 5000      # periodic stat log line
+    layout-check-ms: 5000     # cluster mode: A/B shard count and slot layout
+    wait-log-ms: 20000        # while B does not accept writes or no replica of A can be read: repeat the cause in the log this often (0 = never)
+
+logging:
+  pattern:
+    # UTC time, level, then the message ("[shard N] " prefix comes from the MDC in cluster mode).
+    console: "%d{HH:mm:ss.SSS,UTC} %-5level %X{partition}%msg%n"
