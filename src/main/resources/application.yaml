@@ -48,6 +48,16 @@ redis-dr:
     target:
       nodes: redis-b-leader.redis-dr-b:6379,redis-b-follower.redis-dr-b:6379
 
+  # The replication socket to the source replica of the active site (A). B is written like any client, so this is A only.
+  replication:
+    # repl-ping-replica-period of A's Redis (its default is 10). redis-dr does not set it, this only declares what A uses.
+    # While nothing is written, that PING is the only data on the socket.
+    source-ping-period-seconds: 10
+    # How long the socket may stay silent before the session is dropped and the source selected again (a dead connection
+    # is noticed this late). Must be more than twice the ping period; otherwise a warning is logged and
+    # max(30, 3 x ping period) is used. 0 is not accepted.
+    read-timeout-seconds: 30
+
   scheduler:
     worker-retry-ms: 200      # gap between worker steps (also the pause between two replication sessions)
     source-watch-ms: 1000     # is the source replica promoted to master?

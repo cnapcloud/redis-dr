@@ -28,7 +28,7 @@ class OperatorServiceImplTest {
     private final DrProperties properties = new DrProperties(DrProperties.Mode.CLUSTER, new DrProperties.Sentinel(0,
         new DrProperties.Site(List.of("a:1"), "m", ""), new DrProperties.Site(List.of("b:1"), "m", "")),
         new DrProperties.Cluster(new DrProperties.Endpoint(List.of("a:1")), new DrProperties.Endpoint(List.of("b:1")), 20),
-        new DrProperties.Scheduler(200, 1000, 5000, 5000, 30000));
+        new DrProperties.Scheduler(200, 1000, 5000, 5000, 30000), new DrProperties.Replication(10, 30));
     private final OperatorServiceImpl service = new OperatorServiceImpl(engine, properties);
 
     private static WorkerStatus status(int partition, WorkerState state) {

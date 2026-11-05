@@ -121,6 +121,20 @@ public class DrEngineImpl implements DrEngine, SmartLifecycle {
         startWorkers(partitions);
     }
 
+    /** The read timeout of the replication sockets, replacing an invalid configured one (with a warning). */
+    private int effectiveReadTimeoutSeconds() {
+        DrProperties.Replication replication = properties.replication();
+        int effective = replication.effectiveReadTimeoutSeconds();
+        if (!replication.readTimeoutValid()) {
+            log.warn("redis-dr.replication.read-timeout-seconds={} must be more than twice "
+                    + "redis-dr.replication.source-ping-period-seconds={}, using {} instead",
+                replication.readTimeoutSeconds(), replication.sourcePingPeriodSeconds(), effective);
+        }
+        log.info("replication read timeout: {}s (source ping period {}s)", effective,
+            replication.sourcePingPeriodSeconds());
+        return effective;
+    }
+
     private synchronized void startWorkers(List<Partition> partitions) {
         if (!running) return;
         workerScheduler = new ThreadPoolTaskScheduler();
@@ -129,13 +143,14 @@ public class DrEngineImpl implements DrEngine, SmartLifecycle {
         workerScheduler.setErrorHandler(errorHandler);
         workerScheduler.initialize();
 
+        int readTimeoutMs = effectiveReadTimeoutSeconds() * 1000;
         List<ReplicationWorker> created = new ArrayList<>();
         for (Partition partition : partitions) {
             Checkpoint checkpoint = new Checkpoint();
             TargetWriter target = targetWriterFactory.create(partition);
             EventApplier applier = new EventApplierImpl(checkpoint, target);
             created.add(new ReplicationWorkerImpl(partition, topology, selector, checkpoint, target, applier,
-                properties.fullsyncFallbackSeconds(), properties.scheduler().waitLogMs(), this::fail));
+                properties.fullsyncFallbackSeconds(), properties.scheduler().waitLogMs(), readTimeoutMs, this::fail));
         }
         workers = List.copyOf(created);
         Duration delay = Duration.ofMillis(properties.scheduler().workerRetryMs());

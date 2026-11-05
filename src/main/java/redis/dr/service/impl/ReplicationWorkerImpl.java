@@ -84,6 +84,7 @@ public class ReplicationWorkerImpl implements ReplicationWorker {
     private final EventApplier applier;
     private final int fullsyncFallbackSeconds;
     private final long waitLogMs;
+    private final int readTimeoutMs;
     private final Consumer<DrFatalException> onFatal;
     private final LongSupplier clock;
 
@@ -114,15 +115,16 @@ public class ReplicationWorkerImpl implements ReplicationWorker {
 
     public ReplicationWorkerImpl(Partition partition, SourceTopology topology, SourceSelector selector,
                                  Checkpoint checkpoint, TargetWriter target, EventApplier applier,
-                                 int fullsyncFallbackSeconds, long waitLogMs, Consumer<DrFatalException> onFatal) {
+                                 int fullsyncFallbackSeconds, long waitLogMs, int readTimeoutMs,
+                                 Consumer<DrFatalException> onFatal) {
         this(partition, topology, selector, checkpoint, target, applier, fullsyncFallbackSeconds, waitLogMs,
-            onFatal, System::currentTimeMillis);
+            readTimeoutMs, onFatal, System::currentTimeMillis);
     }
 
     ReplicationWorkerImpl(Partition partition, SourceTopology topology, SourceSelector selector,
                           Checkpoint checkpoint, TargetWriter target, EventApplier applier,
-                          int fullsyncFallbackSeconds, long waitLogMs, Consumer<DrFatalException> onFatal,
-                          LongSupplier clock) {
+                          int fullsyncFallbackSeconds, long waitLogMs, int readTimeoutMs,
+                          Consumer<DrFatalException> onFatal, LongSupplier clock) {
         this.partition = partition;
         this.topology = topology;
         this.selector = selector;
@@ -131,6 +133,7 @@ public class ReplicationWorkerImpl implements ReplicationWorker {
         this.applier = applier;
         this.fullsyncFallbackSeconds = fullsyncFallbackSeconds;
         this.waitLogMs = waitLogMs;
+        this.readTimeoutMs = readTimeoutMs;
         this.onFatal = onFatal;
         this.clock = clock;
     }
@@ -341,7 +344,7 @@ public class ReplicationWorkerImpl implements ReplicationWorker {
 
     private void runSession(SourceNode source) {
         Configuration cfg = Configuration.defaultSetting().setRetries(1).setRetryTimeInterval(200)
-            .setConnectionTimeout(1500).setReadTimeout(10000);
+            .setConnectionTimeout(1500).setReadTimeout(readTimeoutMs);
         if (!checkpoint.isEmpty()) {
             cfg.setReplId(checkpoint.replId());
             cfg.setReplOffset(checkpoint.offset());

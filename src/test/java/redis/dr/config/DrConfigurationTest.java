@@ -31,7 +31,21 @@ class DrConfigurationTest {
             assertThat(p.fullsyncFallbackSeconds()).isZero();
             assertThat(p.scheduler().workerRetryMs()).isEqualTo(200);
             assertThat(p.scheduler().waitLogMs()).isEqualTo(20000);
+            assertThat(p.replication().sourcePingPeriodSeconds()).isEqualTo(10);
+            assertThat(p.replication().readTimeoutSeconds()).isEqualTo(30);
         });
+    }
+
+    @Test
+    void replicationSettingsAreBound() {
+        runner.withPropertyValues("redis-dr.sentinel.source.nodes=sa:26379", "redis-dr.sentinel.target.nodes=sb:26379",
+                "redis-dr.replication.source-ping-period-seconds=20", "redis-dr.replication.read-timeout-seconds=90")
+            .run(ctx -> {
+                DrProperties.Replication r = ctx.getBean(DrProperties.class).replication();
+                assertThat(r.sourcePingPeriodSeconds()).isEqualTo(20);
+                assertThat(r.readTimeoutSeconds()).isEqualTo(90);
+                assertThat(r.effectiveReadTimeoutSeconds()).isEqualTo(90);
+            });
     }
 
     @Test

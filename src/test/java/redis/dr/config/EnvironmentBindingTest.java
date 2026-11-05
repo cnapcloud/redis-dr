@@ -46,7 +46,9 @@ class EnvironmentBindingTest {
             "REDIS_DR_CLUSTER_SOURCE_NODES", "a1:6379,a2:6379",
             "REDIS_DR_CLUSTER_TARGET_NODES", "b1:6379",
             "REDIS_DR_CLUSTER_FULLSYNC_FALLBACK_SECONDS", "60",
-            "REDIS_DR_SCHEDULER_SOURCE_WATCH_MS", "250")).run(ctx -> {
+            "REDIS_DR_SCHEDULER_SOURCE_WATCH_MS", "250",
+            "REDIS_DR_REPLICATION_SOURCE_PING_PERIOD_SECONDS", "5",
+            "REDIS_DR_REPLICATION_READ_TIMEOUT_SECONDS", "40")).run(ctx -> {
             assertThat(ctx).hasNotFailed();
             DrProperties p = ctx.getBean(DrProperties.class);
             assertThat(p.mode()).isEqualTo(DrProperties.Mode.CLUSTER);
@@ -54,6 +56,8 @@ class EnvironmentBindingTest {
             assertThat(p.cluster().target().nodes()).containsExactly("b1:6379");
             assertThat(p.fullsyncFallbackSeconds()).isEqualTo(60);
             assertThat(p.scheduler().sourceWatchMs()).isEqualTo(250);
+            assertThat(p.replication().sourcePingPeriodSeconds()).isEqualTo(5);
+            assertThat(p.replication().readTimeoutSeconds()).isEqualTo(40);
         });
     }
 }

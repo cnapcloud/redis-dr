@@ -136,6 +136,8 @@ redis-dr.sentinel.fullsync-fallback-seconds ->  REDIS_DR_SENTINEL_FULLSYNC_FALLB
 | `redis-dr.cluster.fullsync-fallback-seconds` | `20` | Cluster 모드의 폴백 시간. `0`이면 사용 안 함 |
 | `server.port` | `8081` | [운영자 API](#운영자-api)의 포트 |
 | `server.address` | `127.0.0.1` | 운영자 API가 듣는 주소. **인증이 없으므로** 기본은 loopback만 엽니다. 바꾸려면 아래 [운영자 API](#운영자-api)의 주의를 읽으세요. |
+| `redis-dr.replication.source-ping-period-seconds` | `10` | **Site A** Redis의 `repl-ping-replica-period` 값. redis-dr이 설정하는 값이 아니라 A가 쓰는 값을 **선언**하는 것이므로 A와 같게 두세요. 쓰기가 없을 때 복제 소켓에 오는 데이터는 이 PING뿐입니다. Site B에는 해당하지 않습니다. |
+| `redis-dr.replication.read-timeout-seconds` | `30` | 소스 replica와의 복제 소켓이 이 시간 동안 아무것도 받지 못하면 세션을 닫고 소스를 다시 고릅니다. 죽은 연결을 알아채는 시간이기도 합니다. **ping 주기의 2배보다 커야** 합니다. 아니면 경고를 남기고 `max(30, 3 × ping 주기)`를 씁니다. `0`(타임아웃 없음)은 받지 않습니다. |
 | `redis-dr.scheduler.worker-retry-ms` | `200` | worker 단계 사이 간격(세션과 세션 사이의 휴지 시간 포함) |
 | `redis-dr.scheduler.source-watch-ms` | `1000` | 소스 replica가 master로 승격됐는지 확인하는 주기 |
 | `redis-dr.scheduler.wait-log-ms` | `20000` | Site B에 쓰지 못하거나 읽을 Site A replica가 없는 동안, 같은 대기 사유를 로그에 다시 남기는 주기. `0`이면 반복하지 않습니다. |
@@ -376,6 +378,7 @@ redis-dr --spring.profiles.active=tool verify                     # A의 모든 
 | `stat:`의 `offset`은 늘어나는데 `cp=`가 한참 전 값 | 정상입니다. 체크포인트는 명령을 Site B에 적용할 때 갱신되므로 쓰기가 없는 동안에는 `offset`만 증가합니다. |
 | `redis-replicator` 로그(`PING`, `PONG`, `REPLCONF` …)가 너무 많음 | `LOGGING_LEVEL_COM_MOILIONCIRCLE=WARN`으로 줄입니다. |
 
+| 쓰기가 없을 때 `[redis-replicator] socket error … EOFException`과 `source session ended`가 주기적으로 반복됨 | 읽기 타임아웃과 Site A의 PING 주기가 가까운 경우입니다. 로그 첫 줄의 `EOFException`은 라이브러리가 원래 예외(타임아웃)를 가린 것이고, `reconnecting … retry times:1`도 라이브러리가 실제로 재연결하는 것이 아니라 엔진이 소스를 다시 골라 이어받는 것입니다(데이터 유실 없음). `redis-dr.replication.read-timeout-seconds`가 `source-ping-period-seconds`의 2배보다 큰지, 그리고 `source-ping-period-seconds`가 A의 `repl-ping-replica-period`와 같은지 확인하세요. 시작할 때 `replication read timeout: …` 로그로 적용된 값을 볼 수 있습니다. |
 ## 개발
 
 ```bash

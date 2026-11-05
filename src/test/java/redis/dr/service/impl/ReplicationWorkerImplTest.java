@@ -53,7 +53,7 @@ class ReplicationWorkerImplTest {
 
     private ReplicationWorkerImpl worker(int fallbackSeconds) {
         return new ReplicationWorkerImpl(PARTITION, topology, new SourceSelectorImpl(topology), checkpoint, target,
-            new EventApplierImpl(checkpoint, target), fallbackSeconds, 30_000, fatals::add, clock::get);
+            new EventApplierImpl(checkpoint, target), fallbackSeconds, 30_000, 30_000, fatals::add, clock::get);
     }
 
     private void tick(ReplicationWorkerImpl worker, long advanceMs) {
@@ -570,7 +570,7 @@ class ReplicationWorkerImplTest {
 
     private ReplicationWorkerImpl workerWith(EventApplier applier) {
         return new ReplicationWorkerImpl(PARTITION, topology, new SourceSelectorImpl(topology), checkpoint, target,
-            applier, 0, 30_000, fatals::add, clock::get);
+            applier, 0, 30_000, 30_000, fatals::add, clock::get);
     }
 
     /** A session that has read up to offset 1500 although B only holds 1000. */
@@ -771,7 +771,7 @@ class ReplicationWorkerImplTest {
         target.stored = new StoredCheckpoint("OK", REPLID, 1000L);
         FakeApplier applier = new FakeApplier();
         ReplicationWorkerImpl never = new ReplicationWorkerImpl(PARTITION, topology, new SourceSelectorImpl(topology),
-            checkpoint, target, applier, 0, 0, fatals::add, clock::get);
+            checkpoint, target, applier, 0, 0, 30_000, fatals::add, clock::get);
         never.runOnce();
         applier.failure = new RespError("OOM");
         never.onEvent(sessionAt1500(), ANY_EVENT);
