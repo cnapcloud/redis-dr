@@ -2,7 +2,7 @@
 
 ## 개요
 
-운영 중인 Redis(Site A)의 데이터를 재해복구(DR)용 Redis(Site B)로 실시간 복제하는 프로그램입니다. 이 문서에서 `redis-dr`은 이 프로그램, 또는 실행 중인 프로세스를 가리킵니다. Redis Sentinel 구성과 Redis Cluster 구성을 모두 지원하며, 같은 프로그램에서 `redis-dr.mode` 설정만 바꿔 선택합니다.
+운영 중인 Redis(Site A)의 데이터를 재해복구(DR)용 Redis(Site B)로 실시간 복제하는 엔진입니다. 이 문서에서 `redis-dr`은 이 엔진, 또는 실행 중인 프로세스를 가리킵니다. Redis Sentinel 구성과 Redis Cluster 구성을 모두 지원하며, 같은 엔진에서 `redis-dr.mode` 설정만 바꿔 선택합니다.
 
 - Site A의 **replica 한 곳**에서 복제 스트림(PSYNC)을 읽어 Site B master에 일반 write 클라이언트로 씁니다. Site A master에는 붙지 않으므로 Sentinel/Cluster가 redis-dr을 승격 후보로 보지 않습니다.
 - 복제 위치(체크포인트)는 **Site B 안에** 데이터와 같은 Lua 스크립트로 함께 저장됩니다. redis-dr을 재시작하거나 소스 replica가 바뀌어도 풀 싱크 없이 이어받습니다.
@@ -105,6 +105,8 @@ spec:
 
 운영자 API는 기본적으로 Pod 안의 loopback에서만 듣습니다. `kubectl -n <ns> port-forward deploy/redis-dr 8081:8081` 후 `http://localhost:8081/swagger-ui.html`로 접근하세요(Cluster 모드로 k3s 클러스터에서 시험한 방법입니다).
 
+Site A와 Site B가 서로 다른 Kubernetes 클러스터라면 `redis-dr-a`, `redis-dr-b` 같은 내부 DNS 이름으로는 접속할 수 없습니다. 반대편에서 닿는 주소와 announce 설정은 [클러스터 간 네트워크 구성](docs/cross-cluster-network.md)을 참고하세요.
+
 ## 설정
 
 모든 설정과 기본값은 [application.yaml](src/main/resources/application.yaml)에 있고, 아래 세 가지 방법으로 덮어씁니다. 나중 것이 앞의 것을 덮어씁니다.
@@ -134,10 +136,10 @@ redis-dr.sentinel.fullsync-fallback-seconds ->  REDIS_DR_SENTINEL_FULLSYNC_FALLB
 | `redis-dr.cluster.source.nodes` | `redis-a-leader.redis-dr-a:6379,redis-a-follower.redis-dr-a:6379` | Site A 클러스터의 아무 노드들. `CLUSTER SHARDS`를 처음 응답하는 노드에 묻습니다. |
 | `redis-dr.cluster.target.nodes` | `redis-b-leader.redis-dr-b:6379,redis-b-follower.redis-dr-b:6379` | Site B 클러스터의 아무 노드들 |
 | `redis-dr.cluster.fullsync-fallback-seconds` | `20` | Cluster 모드의 폴백 시간. `0`이면 사용 안 함 |
-| `server.port` | `8081` | [운영자 API](#운영자-api)의 포트 |
-| `server.address` | `127.0.0.1` | 운영자 API가 듣는 주소. **인증이 없으므로** 기본은 loopback만 엽니다. 바꾸려면 아래 [운영자 API](#운영자-api)의 주의를 읽으세요. |
 | `redis-dr.replication.source-ping-period-seconds` | `10` | **Site A** Redis의 `repl-ping-replica-period` 값. redis-dr이 설정하는 값이 아니라 A가 쓰는 값을 **선언**하는 것이므로 A와 같게 두세요. 쓰기가 없을 때 복제 소켓에 오는 데이터는 이 PING뿐입니다. Site B에는 해당하지 않습니다. |
 | `redis-dr.replication.read-timeout-seconds` | `30` | 소스 replica와의 복제 소켓이 이 시간 동안 아무것도 받지 못하면 세션을 닫고 소스를 다시 고릅니다. 죽은 연결을 알아채는 시간이기도 합니다. **ping 주기의 2배보다 커야** 합니다. 아니면 경고를 남기고 `max(30, 3 × ping 주기)`를 씁니다. `0`(타임아웃 없음)은 받지 않습니다. |
+| `server.port` | `8081` | [운영자 API](#운영자-api)의 포트 |
+| `server.address` | `127.0.0.1` | 운영자 API가 듣는 주소. **인증이 없으므로** 기본은 loopback만 엽니다. 바꾸려면 아래 [운영자 API](#운영자-api)의 주의를 읽으세요. |
 | `redis-dr.scheduler.worker-retry-ms` | `200` | worker 단계 사이 간격(세션과 세션 사이의 휴지 시간 포함) |
 | `redis-dr.scheduler.source-watch-ms` | `1000` | 소스 replica가 master로 승격됐는지 확인하는 주기 |
 | `redis-dr.scheduler.wait-log-ms` | `20000` | Site B에 쓰지 못하거나 읽을 Site A replica가 없는 동안, 같은 대기 사유를 로그에 다시 남기는 주기. `0`이면 반복하지 않습니다. |
@@ -376,9 +378,9 @@ redis-dr --spring.profiles.active=tool verify                     # A의 모든 
 | `resume`이 `409` | 응답의 사유를 보세요. 체크포인트가 없거나 `SYNCING`이면 이어받을 수 없고, 중지 시간이 길어 replica의 backlog를 지났거나 Site A 이력이 갈라진 경우에도 거부합니다. `GET /api/v1/partitions/{index}/resume-check`로 먼저 확인하고, Site B를 다시 채워도 되면 `full-sync`를 호출하세요. |
 | 운영자 API에 접속이 안 됨 | 기본은 `127.0.0.1`에서만 듣습니다. `kubectl port-forward`로 접근하거나, Docker에서는 `SERVER_ADDRESS=0.0.0.0`과 `-p 127.0.0.1:8081:8081`을 쓰세요. 프로세스가 종료됐다면(`fatal, shutting down`) API도 없습니다. |
 | `stat:`의 `offset`은 늘어나는데 `cp=`가 한참 전 값 | 정상입니다. 체크포인트는 명령을 Site B에 적용할 때 갱신되므로 쓰기가 없는 동안에는 `offset`만 증가합니다. |
+| 쓰기가 없을 때 `[redis-replicator] socket error … EOFException`과 `source session ended`가 주기적으로 반복됨 | 읽기 타임아웃과 Site A의 PING 주기가 가까운 경우입니다. 로그 첫 줄의 `EOFException`은 라이브러리가 원래 예외(타임아웃)를 가린 것이고, `reconnecting … retry times:1`도 라이브러리가 실제로 재연결하는 것이 아니라 엔진이 소스를 다시 골라 이어받는 것입니다(데이터 유실 없음). `redis-dr.replication.read-timeout-seconds`가 `source-ping-period-seconds`의 2배보다 큰지, 그리고 `source-ping-period-seconds`가 A의 `repl-ping-replica-period`와 같은지 확인하세요. 시작할 때 `replication read timeout: …` 로그로 적용된 값을 볼 수 있습니다. |
 | `redis-replicator` 로그(`PING`, `PONG`, `REPLCONF` …)가 너무 많음 | `LOGGING_LEVEL_COM_MOILIONCIRCLE=WARN`으로 줄입니다. |
 
-| 쓰기가 없을 때 `[redis-replicator] socket error … EOFException`과 `source session ended`가 주기적으로 반복됨 | 읽기 타임아웃과 Site A의 PING 주기가 가까운 경우입니다. 로그 첫 줄의 `EOFException`은 라이브러리가 원래 예외(타임아웃)를 가린 것이고, `reconnecting … retry times:1`도 라이브러리가 실제로 재연결하는 것이 아니라 엔진이 소스를 다시 골라 이어받는 것입니다(데이터 유실 없음). `redis-dr.replication.read-timeout-seconds`가 `source-ping-period-seconds`의 2배보다 큰지, 그리고 `source-ping-period-seconds`가 A의 `repl-ping-replica-period`와 같은지 확인하세요. 시작할 때 `replication read timeout: …` 로그로 적용된 값을 볼 수 있습니다. |
 ## 개발
 
 ```bash
