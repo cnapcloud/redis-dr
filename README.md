@@ -201,7 +201,7 @@ INFO  stat: src=10.0.0.5 replid=… offset=… cp=OK@… applied=… restored=�
 | INFO | `source became master, switching: host=…` | 소스 replica가 master로 승격되어 다른 replica로 옮깁니다. |
 | INFO | `checkpoint re-anchored after failover: replid=a -> b …` | 승격 후 같은 위치를 새 master의 이력 id로 맞췄습니다. 증분으로 이어집니다. |
 | WARN | `no replica can serve the checkpoint, dropping it and full sync (B will be flushed)` | 폴백이 발동해 풀 싱크로 전환합니다. |
-| ERROR | `source history diverged, dropping checkpoint and full sync (B will be flushed)` | Site A의 이력이 갈라졌습니다(강제 failover 등). 풀 싱크로 전환합니다. |
+| WARN | `source history diverged, dropping checkpoint and full sync (B will be flushed)` | Site A의 이력이 갈라졌습니다(강제 failover 등). 풀 싱크로 전환합니다. |
 | ERROR | `fatal, shutting down: …` | 복구할 수 없는 오류입니다(Site B 쓰기 실패는 해당하지 않습니다). 프로세스가 종료됩니다. |
 | WARN | `operator request: action=… partition=… from=<IP>` | 운영자 API로 변경 요청(`pause`, `resume`, `full-sync`)이 들어왔습니다. 호출한 IP가 남습니다. |
 | WARN | `paused by the operator: force=…` / INFO `resumed by the operator: …` | 운영자가 중지하거나 재개했습니다. |
