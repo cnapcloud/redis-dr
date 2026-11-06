@@ -1,0 +1,39 @@
+# redis-dr (Sentinel mode) - namespace dr-engine
+# kubectl apply -f redis-dr-sentinel.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dr-engine
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-dr
+  namespace: dr-engine
+spec:
+  replicas: 1            # 한 Site A -> Site B 쌍에는 하나만 실행
+  strategy:
+    type: Recreate       # 롤아웃 중에도 두 인스턴스가 겹치지 않게 함
+  selector:
+    matchLabels: { app: redis-dr }
+  template:
+    metadata:
+      labels: { app: redis-dr }
+    spec:
+      containers:
+        - name: redis-dr
+          image: redis-dr:0.1.0
+          env:
+            - name: REDIS_DR_MODE
+              value: sentinel
+            - name: REDIS_DR_SENTINEL_SOURCE_NODES
+              value: redis-a-s-hl.site-a.svc.cluster.local:26379
+            - name: REDIS_DR_SENTINEL_SOURCE_MASTER
+              value: mymaster
+            - name: REDIS_DR_SENTINEL_TARGET_NODES
+              value: redis-b-s-hl.site-b.svc.cluster.local:26379
+            - name: REDIS_DR_SENTINEL_TARGET_MASTER
+              value: mymaster
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }

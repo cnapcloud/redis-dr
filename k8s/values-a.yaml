@@ -1,0 +1,51 @@
+# Cluster A (active) - namespace redis-dr-a
+# helm upgrade --install redis-a ot-helm/redis-cluster -n redis-dr-a --create-namespace -f values-a.yaml
+redisCluster:
+  name: redis-a
+  clusterSize: 3          # shard 수 (leader 3 + follower 3 = pod 6개)
+  clusterVersion: v7
+  image: quay.io/opstree/redis
+  tag: v7.0.15            # DR 엔진은 Redis 7 이상 필요
+  persistenceEnabled: true
+  # node 분산은 가능하면 지키고, 안 되면 무시한다(ScheduleAnyway).
+  # 같은 shard의 master/replica 분리는 pod별로 지정할 수 없어 여기서 보장하지 않는다.
+  leader:
+    replicas: 3
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            cluster: redis-a
+            role: leader
+  follower:
+    replicas: 3
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            cluster: redis-a
+            role: follower
+
+externalConfig:
+  enabled: true
+  data: |
+    cluster-node-timeout 5000
+
+storageSpec:
+  volumeClaimTemplate:
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi
+  nodeConfVolume: true     # nodes.conf를 PVC에 보존
+  nodeConfVolumeClaimTemplate:
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi

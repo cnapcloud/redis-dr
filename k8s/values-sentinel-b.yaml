@@ -1,0 +1,24 @@
+# Site B (DR standby) - namespace site-b
+# helm upgrade --install redis-b ot-helm/redis-replication --version 0.17.1 -n site-b --create-namespace -f values-sentinel-b.yaml
+redisReplication:
+  name: redis-b
+  clusterSize: 3            # master 1 + replica 2
+  image: quay.io/opstree/redis
+  tag: v7.0.15
+
+sentinel:
+  enabled: true
+  image: quay.io/opstree/redis-sentinel
+  tag: v7.0.15
+  size: 3
+  downAfterMilliseconds: "5000"
+  failoverTimeout: "10000"
+  parallelSyncs: "1"
+
+storageSpec:
+  volumeClaimTemplate:
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi
